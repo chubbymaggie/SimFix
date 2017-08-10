@@ -119,10 +119,10 @@ public class SimpleFilter {
 			}
 			Double similarity = CodeBlockMatcher.getSimilarity(_buggyCode, block);
 //			System.out.println(block.toSrcString().toString());
-			if(similarity < guard){
-//				System.out.println("Filtered by similiraty value : " + similarity);
-				continue;
-			}
+//			if(similarity < guard){
+////				System.out.println("Filtered by similiraty value : " + similarity);
+//				continue;
+//			}
 //			similarity += CodeBlockMatcher.getRewardSimilarity(_buggyCode, block);
 //			if (codeRec.contains(block.toSrcString().toString()) || _buggyCode.hasIntersection(block)) {
 //				System.out.println("Duplicate >>>>>>>>>>>>>>>>");
