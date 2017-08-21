@@ -286,7 +286,7 @@ public class CodeBlockMatcher {
 			String simName = sim.getKey().getName();
 			for(Entry<Variable, List<USE_TYPE>> buggy : bMap.entrySet()){
 				String buggyName = buggy.getKey().getName();
-				Double similarity = 0.33 * LCS(sim.getValue(), buggy.getValue()) + 0.33 * NodeUtils.nameSimilarity(simName, buggyName) + 0.33 * NodeUtils.typeSimilarity(sim.getKey().getType(), buggy.getKey().getType());
+				Double similarity = LCS(sim.getValue(), buggy.getValue()) + NodeUtils.nameSimilarity(simName, buggyName) + NodeUtils.typeSimilarity(sim.getKey().getType(), buggy.getKey().getType());
 				if(similarity > 0.5){
 					similarityTable[simNameMap.get(simName)][buggyNameMap.get(buggyName)] = similarity;
 				}
