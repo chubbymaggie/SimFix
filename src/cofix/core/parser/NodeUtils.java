@@ -9,6 +9,7 @@ package cofix.core.parser;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -29,6 +30,7 @@ import org.eclipse.jdt.core.dom.IfStatement;
 import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
+import org.eclipse.jdt.core.dom.NumberLiteral;
 import org.eclipse.jdt.core.dom.PrimitiveType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
@@ -55,9 +57,12 @@ import cofix.core.parser.node.expr.CharLiteral;
 import cofix.core.parser.node.expr.ConditionalExpr;
 import cofix.core.parser.node.expr.DoubleLiteral;
 import cofix.core.parser.node.expr.Expr;
+import cofix.core.parser.node.expr.FieldAcc;
 import cofix.core.parser.node.expr.FloatLiteral;
+import cofix.core.parser.node.expr.InfixExpr;
 import cofix.core.parser.node.expr.IntLiteral;
 import cofix.core.parser.node.expr.LongLiteral;
+import cofix.core.parser.node.expr.MethodInv;
 import cofix.core.parser.node.expr.NumLiteral;
 import cofix.core.parser.node.expr.QName;
 import cofix.core.parser.node.expr.SName;
@@ -196,7 +201,7 @@ public class NodeUtils {
 			for(int i = 0; i < srcArg.size(); i++){
 				Expr sExpr = srcArg.get(i);
 				Expr tExpr = tarArgs.get(i);
-				if(sExpr instanceof BoolLiteral || sExpr instanceof NumLiteral || sExpr instanceof CharLiteral){
+				if(!canReplaceArg(sExpr) || !canReplaceArg(tExpr)){
 					continue;
 				}
 				String sString = sExpr.toSrcString().toString();
@@ -281,15 +286,20 @@ public class NodeUtils {
 					NodeUtils.restoreVariables(entry.getValue());
 				}
 			}
-		} else if(srcArg.size() > tarArgs.size()){
+		} else if(srcArg.size() > tarArgs.size() && srcArg.size() <= tarArgs.size() + 2){
 			Set<Integer> matchRec = new HashSet<>();
 			for(int i = 0; i < tarArgs.size(); i++){
 				boolean findSame = false;
+				Expr tExpr = tarArgs.get(i);
+				if(!canReplaceArg(tExpr)){
+					continue;
+				}
 				for(int j = 0; j < srcArg.size(); j++){
-					if(matchRec.contains(j)){
+					Expr sExpr = srcArg.get(j);
+					if(!canReplaceArg(sExpr) || matchRec.contains(j)){
 						continue;
 					}
-					if(tarArgs.get(i).toSrcString().toString().equals(srcArg.get(j).toSrcString().toString())){
+					if(tExpr.toSrcString().toString().equals(sExpr.toSrcString().toString())){
 						matchRec.add(j);
 						findSame = true;
 						break;
@@ -297,10 +307,11 @@ public class NodeUtils {
 				}
 				if(!findSame){
 					for(int j = 0; j < srcArg.size(); j++){
-						if(matchRec.contains(j)){
+						Expr sExpr = srcArg.get(j);
+						if(!canReplaceArg(sExpr) || matchRec.contains(j)){
 							continue;
 						}
-						if(srcArg.get(j).getType().toString().equals(tarArgs.get(i).getType().toString())){
+						if(sExpr.getType().toString().equals(tExpr.getType().toString())){
 							matchRec.add(j);
 							findSame = true;
 							break;
@@ -327,20 +338,25 @@ public class NodeUtils {
 					}
 				}
 			}
-			Deletion deletion = new Deletion(currNode, srcID, stringBuffer.toString(), nodeType);
-			modifications.add(deletion);
-		} else {
+			Revision revision = new Revision(currNode, srcID, stringBuffer.toString(), nodeType);
+			modifications.add(revision);
+		} else if (srcArg.size() < tarArgs.size() && srcArg.size() + 2 >= tarArgs.size()){
 			int[] matchRec = new int[tarArgs.size()];
 			for(int i = 0; i < tarArgs.size(); i++){
 				matchRec[i] = -1;
 			}
 			for(int i = 0; i < srcArg.size(); i++){
 				boolean findSame = false;
+				Expr sExpr = srcArg.get(i);
+				if(!canReplaceArg(sExpr)){
+					continue;
+				}
 				for(int j = 0; j < tarArgs.size(); j++){
-					if(matchRec[j] != -1){
+					Expr tExpr = tarArgs.get(j);
+					if(!canReplaceArg(tExpr) || matchRec[j] != -1){
 						continue;
 					}
-					if(srcArg.get(i).toSrcString().toString().equals(tarArgs.get(j).toSrcString().toString())){
+					if(sExpr.toSrcString().toString().equals(tExpr.toSrcString().toString())){
 						matchRec[j] = i;
 						findSame = true;
 						break;
@@ -348,10 +364,11 @@ public class NodeUtils {
 				}
 				if(!findSame){
 					for(int j = 0; j < tarArgs.size(); j++){
-						if(matchRec[j] != -1){
+						Expr tExpr = tarArgs.get(i);
+						if(!canReplaceArg(tExpr) || matchRec[j] != -1){
 							continue;
 						}
-						if(tarArgs.get(j).getType().toString().equals(srcArg.get(i).getType().toString())){
+						if(tExpr.getType().toString().equals(sExpr.getType().toString())){
 							matchRec[j] = i;
 							findSame = true;
 							break;
@@ -389,6 +406,13 @@ public class NodeUtils {
 		}
 		
 		return modifications;
+	}
+	
+	private static boolean canReplaceArg(Expr expr){
+		if(expr instanceof SName || expr instanceof QName || expr instanceof FieldAcc){
+			return true;
+		}
+		return false;
 	}
 	
 	public static boolean isSameNodeType(Node src, Node tar){
@@ -637,11 +661,25 @@ public class NodeUtils {
 							Map<SName, Pair<String, String>> tryReplace = tryReplaceAllVariables(expr, varTrans, allUsableVariables);
 							sName.setDirectDependency(expr);
 							if(tryReplace != null){
-								canUse = true;
-								NodeUtils.replaceVariable(tryReplace);
-								String replaceName = expr.toSrcString().toString();
-								record.put(sName, new Pair<String, String>(name, replaceName));
-								NodeUtils.restoreVariables(tryReplace);
+								boolean duplicate = false;
+								if (expr instanceof SName) {
+									for (Entry<SName, Pair<String, String>> entry : tryReplace.entrySet()) {
+										for (Entry<SName, Pair<String, String>> exist : record.entrySet()) {
+											if (duplicate || (!exist.getKey().getName().equals(name) && exist.getValue()
+													.getSecond().equals(entry.getValue().getSecond()))) {
+												duplicate = true;
+												break;
+											}
+										}
+									}
+								}
+								if(!duplicate){
+									canUse = true;
+									NodeUtils.replaceVariable(tryReplace);
+									String replaceName = expr.toSrcString().toString();
+									record.put(sName, new Pair<String, String>(name, replaceName));
+									NodeUtils.restoreVariables(tryReplace);
+								}
 							}
 						}
 						if(!canUse){
@@ -681,6 +719,37 @@ public class NodeUtils {
 	public static boolean replaceExpr(int srcID, String avoid, Expr srcExpr, Expr tarExpr, Map<String, String> varTrans, Map<String, Type> allUsableVariables, List<Modification> modifications){
 		if(srcExpr.toSrcString().toString().equals(tarExpr.toSrcString().toString())){
 			return true;
+		}
+		if(srcExpr.toSrcString().toString().length() < 2){
+			return false;
+		}
+		if(srcExpr instanceof MethodInv){
+			if(tarExpr instanceof MethodInv){
+				MethodInv srcMethod = (MethodInv) srcExpr;
+				MethodInv tarMethod = (MethodInv) tarExpr;
+				List<Modification> tmp = new LinkedList<>();
+				if(srcMethod.getExpression() != null && tarMethod.getExpression() != null && !srcMethod.getExpression().match(tarMethod.getExpression(), varTrans, allUsableVariables, tmp)){
+					return false;
+				}
+			} else {
+				return false;
+			}
+		} else if(tarExpr instanceof MethodInv){
+			return false;
+		}
+		if(srcExpr instanceof InfixExpr){
+			if(!(tarExpr instanceof InfixExpr)){
+				return false;
+			} else if(!canReplaceOperator(((InfixExpr)srcExpr).getOperator(), ((InfixExpr)tarExpr).getOperator())){
+				return false;
+			}
+		} else if(tarExpr instanceof InfixExpr){
+			InfixExpr infixExpr = (InfixExpr) tarExpr;
+			if(infixExpr.getLhs() instanceof NumLiteral && NodeUtils.isBoundaryValue((NumLiteral) infixExpr.getLhs())){
+				return false;
+			} else if(infixExpr.getRhs() instanceof NumLiteral && NodeUtils.isBoundaryValue((NumLiteral) infixExpr.getRhs())){
+				return false;
+			}
 		}
 		Type srcType = srcExpr.getType();
 		Type tarType = tarExpr.getType();

@@ -76,23 +76,31 @@ public class Blk extends Stmt {
 			if(_statements.size() == 1 && other._statements.size() == 1){
 				Node thisNode = _statements.get(0);
 				Node otherNode = other._statements.get(0);
-				if(otherNode instanceof ThrowStmt || otherNode instanceof ReturnStmt){
-					if(thisNode instanceof ThrowStmt && otherNode instanceof ThrowStmt){
+				if(otherNode instanceof ThrowStmt){
+					if(thisNode instanceof ThrowStmt){
 						if(((ThrowStmt)thisNode).getExceptionType().equals(((ThrowStmt)otherNode).getExceptionType())){
 							return true;
 						}
-					}
-					String source = thisNode.toSrcString().toString(); 
-					if(!source.equals(otherNode.toSrcString().toString())){
-						Map<SName, Pair<String, String>> record = NodeUtils.tryReplaceAllVariables(otherNode, varTrans, allUsableVariables);
-						if(record != null){
-							NodeUtils.replaceVariable(record);
-							String target = otherNode.toSrcString().toString();
-							if(!source.equals(target)){
-								Revision revision = new Revision(this, WHOLE, target, _nodeType);
-								modifications.add(revision);
+					} else {
+						String source = thisNode.toSrcString().toString(); 
+						if(!source.equals(otherNode.toSrcString().toString())){
+							Map<SName, Pair<String, String>> record = NodeUtils.tryReplaceAllVariables(otherNode, varTrans, allUsableVariables);
+							if(record != null){
+								NodeUtils.replaceVariable(record);
+								String target = otherNode.toSrcString().toString();
+								if(!source.equals(target)){
+									Revision revision = new Revision(this, WHOLE, target, _nodeType);
+									modifications.add(revision);
+								}
+								NodeUtils.restoreVariables(record);
 							}
-							NodeUtils.restoreVariables(record);
+						}
+					}
+				} else if(otherNode instanceof ReturnStmt){
+					if(thisNode instanceof ReturnStmt){
+						List<Modification> tmp = new LinkedList<>();
+						if(thisNode.match(otherNode, varTrans, allUsableVariables, tmp)){
+							modifications.addAll(tmp);
 						}
 					}
 				}
